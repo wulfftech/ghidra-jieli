@@ -279,14 +279,77 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
 	eregA = zext(*:2 addr);
 }
 
+###########################################################################################
+# Halfword load/store, [rB + simm10] and [++rB = simm10] (ins0411 = 0xd5)
 #
-# rA = h[rB+imm9] (u)
-#
-:lh.z eregA, [eregB + imm9] is group=7 & ins0411=0xd5 & ins0203=0 & imm0000 ; eregA & imm2427 & eregB & imm1619
-[ imm9 = (imm0000 << 8) | (imm2427 << 4) | imm1619; ]
+# Verified against Jieli's own llvm-objdump (-mcpu=r3), on every occurrence in a BR28 app.bin and
+# on hand-crafted words covering each bit:
+#   first halfword  0xed5X, X = P:S:s1:s0
+#     P  (ins0303) = 1: pre-increment with writeback, `[++rB = off]`; 0: plain `[rB + off]`
+#     S  (ins0202) = 1: signed load / store of the HIGH half of rA (`= rA.h`); 0: zero-extend / low half
+#     s1 s0 (imm0001s) = top two bits of the offset, sign-extended
+#   second halfword rA(12-15) : off[7:4](8-11) : rB(4-7) : off[3:1](1-3) : st(0), st=1 is a store
+#   off = sext10(s1 s0 off[7:1] 0): -512..510, always even, NOT scaled.
+#   e.g. ed59 2902 = r2 = h[++r0=402] (u), ed5b 5f3e = r5 = h[++r3=-2] (u),
+#        ed5a 0000 = r0 = h[++r0=-512] (u), ed5c 0001 = h[++r0=0] = r0.h, ed53 8f4f = h[r4+-2] = r8
+###########################################################################################
+
+:lh.z eregA, [eregB + simm10] is group=7 & ins0411=0xd5 & ins0303=0 & ins0202=0 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=0
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
 {
-    addr:4 = eregB + imm9;
+    local addr:4 = eregB + simm10;
     eregA = zext(*:2 addr);
+}
+
+:lh.s eregA, [eregB + simm10] is group=7 & ins0411=0xd5 & ins0303=0 & ins0202=1 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=0
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    local addr:4 = eregB + simm10;
+    eregA = sext(*:2 addr);
+}
+
+:sh eregA, [eregB + simm10] is group=7 & ins0411=0xd5 & ins0303=0 & ins0202=0 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=1
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    local addr:4 = eregB + simm10;
+    *:2 addr = eregA:2;
+}
+
+:sh eregA^".h", [eregB + simm10] is group=7 & ins0411=0xd5 & ins0303=0 & ins0202=1 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=1
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    local addr:4 = eregB + simm10;
+    *:2 addr = eregA(2);
+}
+
+:lh.z eregA, [++eregB = #simm10] is group=7 & ins0411=0xd5 & ins0303=1 & ins0202=0 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=0
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    eregB = eregB + simm10;
+    eregA = zext(*:2 eregB);
+}
+
+:lh.s eregA, [++eregB = #simm10] is group=7 & ins0411=0xd5 & ins0303=1 & ins0202=1 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=0
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    eregB = eregB + simm10;
+    eregA = sext(*:2 eregB);
+}
+
+:sh eregA, [++eregB = #simm10] is group=7 & ins0411=0xd5 & ins0303=1 & ins0202=0 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=1
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    local v:2 = eregA:2;
+    eregB = eregB + simm10;
+    *:2 eregB = v;
+}
+
+:sh eregA^".h", [++eregB = #simm10] is group=7 & ins0411=0xd5 & ins0303=1 & ins0202=1 & imm0001s ; eregA & imm2427 & eregB & imm1719 & imm1616=1
+[ simm10 = (imm0001s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
+{
+    local v:2 = eregA(2);
+    eregB = eregB + simm10;
+    *:2 eregB = v;
 }
 
 ###########################################################################################
@@ -325,15 +388,6 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
 }
 
 
-#
-# rA = h[rB+imm9] (s)
-#
-:lh.s eregA, [eregB + imm9] is group=7 & ins0411=0xd5 & ins0203=1 & imm0000 ; eregA & imm2427 & eregB & imm1619
-[ imm9 = (imm0000 << 8) | (imm2427 << 4) | imm1619; ]
-{
-    addr:4 = eregB + imm9;
-    eregA = sext(*:2 addr);
-}
 
 
 ###########################################################################################
@@ -646,15 +700,6 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
 	*:2 addr = regAl:2;
 }
 
-#
-# h[rB+imm9s] = rAl
-#
-:sh eregA, [eregB + imm9s] is group=7 & ins0411=0xd5 & ins0203=0 & imm0002s ; eregA & imm2427 & eregB & imm1719 & imm1616=1
-[ imm9s = (imm0002s << 8) | (imm2427 << 4) | (imm1719 << 1); ]
-{
-    addr:4 = eregB + imm9s;
-    *:2 addr = eregA:2;
-}
 
 #
 # h[rB + rC] = rAl
