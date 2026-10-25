@@ -388,8 +388,6 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
 }
 
 
-
-
 ###########################################################################################
 # Load Byte (sign-extend)
 ###########################################################################################
@@ -587,45 +585,6 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
 	*:4 addr = regAl:4;
 }
 
-#
-# [rA + imm5m4] = imm10 (10 bits)
-#
-:sw imm1625, [eregA + offset] is group=7 & ins0511=0x52 & imm0004 ; imm1625 & imm2627=0 & eregA
-[ offset = imm0004 * 4; ]
-{
-    local addr:4 = eregA + offset;
-    *:4 addr = imm1625;
-}
-
-#
-# [rA + imm5m4] = imm32 (32 bits)
-#
-:sw v, [eregA + offset] is group=7 & ins0511=0x52 & imm0004 ; imm1622 & imm2325 & imm2627=1 & eregA
-[ offset = imm0004 * 4; v = ( (0x80 | imm1622) << 24 ) >> imm2325; ]
-{
-    local addr:4 = eregA + offset;
-    *:4 addr = v;
-}
-
-#
-# [rA + imm5m4] = imm24 (24 bits)
-#
-:sw v, [eregA + offset] is group=7 & ins0511=0x52 & imm0004 ; imm1622 & imm2325 & imm2627=2 & eregA
-[ offset = imm0004 * 4; v = ( (0x80 | imm1622) << 16 ) >> imm2325; ]
-{
-    local addr:4 = eregA + offset;
-    *:4 addr = v;
-}
-
-#
-# [rA + imm5m4] = imm16 (16 bits)
-#
-:sw v, [eregA + offset] is group=7 & ins0511=0x52 & imm0004 ; imm1622 & imm2325 & imm2627=3 & eregA
-[ offset = imm0004 * 4; v = ( (0x80 | imm1622) << 8 ) >> imm2325; ]
-{
-    local addr:4 = eregA + offset;
-    *:4 addr = v;
-}
 
 #
 # [rA + imm11s] = rB

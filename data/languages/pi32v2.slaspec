@@ -304,18 +304,27 @@ regCxl: regCxlo is regCxs=1 & regCxlo { export regCxlo; }
 
 
 #
-# 12-bit bitmask on second 16-bit instruction (group 7)
+# 12-bit packed immediate on the second 16-bit word (group 7). Same scheme as ARM's modified
+# immediates; verified against Jieli's llvm-objdump -mcpu=r3 on or/and/xor/add/sub/mul/mov/if:
+#   imm2427 = 0: 0x000000XY   1: 0x00XY00XY   2: 0xXY00XY00   3: 0xXYXYXYXY   (XY = imm1623)
+#   imm2627 = 1..3: (0x80 | imm1622) << (8 * (4 - imm2627)) >> imm2325
+# e.g. e140 0101 = r0 | 0x10001, e140 0201 = r0 | 0x1000100, e140 04e0 = r0 | 0x70000000.
+# notpackedimm12 is its complement (the and-not form, ins0411=0x17: e170 0101 = r0 & 0xFFFEFFFE).
 #
 packedimm12: imm1623 is imm1623 & imm2427=0 { imm:4 = imm1623; export imm; }
+
+packedimm12: res is imm1623 & imm2427=1
+    [ res = (imm1623 << 16) | imm1623; ]
+    { imm:4 = res; export imm;}
+
+packedimm12: res is imm1623 & imm2427=2
+    [ res = (imm1623 << 24) | (imm1623 << 8); ]
+    { imm:4 = res; export imm;}
 
 packedimm12: res is imm1623 & imm2427=3
     [ res = (imm1623 << 24) | (imm1623 << 16) | (imm1623 << 8) | imm1623; ]
     { imm:4 = res; export imm;}
 
-packedimm12: res is imm1623 & imm2427=1
-    [ res = (imm1623 << 24) | (imm1623 << 8); ]
-    { imm:4 = res; export imm;}
-    
 packedimm12: res is imm1622 & imm2325 & imm2627=1
     [ res = ((0x80 | imm1622) << 24 ) >> imm2325; ]
     { imm:4 = res; export imm;}
@@ -328,34 +337,33 @@ packedimm12: res is imm1622 & imm2325 & imm2627=3
     [ res = ((0x80 | imm1622) << 8 ) >> imm2325; ]
     { imm:4 = res; export imm;}
 
-
-#
-# 12-bit complemented bitmask on second 16-bit instruction (group 7)
-#
-
-notpackedimm12: res is imm1623 & imm2427=0 
-    [ res = imm1623^0xffffffff; ]
+notpackedimm12: res is imm1623 & imm2427=0
+    [ res = imm1623 ^ 0xffffffff; ]
     { imm:4 = res; export imm; }
 
-notpackedimm12: res is imm1623 & imm2427=3
-    [ res = ((imm1623 << 24) | (imm1623 << 16) | (imm1623 << 8) | imm1623)^0xffffffff; ]
-    { imm:4 = res^0xffffffff; export imm;}
-
 notpackedimm12: res is imm1623 & imm2427=1
-    [ res = ((imm1623 << 24) | (imm1623 << 8))^0xffffffff; ]
-    { imm:4 = res^0xffffffff; export imm;}
+    [ res = ((imm1623 << 16) | imm1623) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
+
+notpackedimm12: res is imm1623 & imm2427=2
+    [ res = ((imm1623 << 24) | (imm1623 << 8)) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
+
+notpackedimm12: res is imm1623 & imm2427=3
+    [ res = ((imm1623 << 24) | (imm1623 << 16) | (imm1623 << 8) | imm1623) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
 
 notpackedimm12: res is imm1622 & imm2325 & imm2627=1
-    [ res = (((0x80 | imm1622) << 24 ) >> imm2325)^0xffffffff; ]
-    { imm:4 = 0xffffffff^res; export imm;}
+    [ res = (((0x80 | imm1622) << 24 ) >> imm2325) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
 
 notpackedimm12: res is imm1622 & imm2325 & imm2627=2
-    [ res = (((0x80 | imm1622) << 16 ) >> imm2325)^0xffffffff; ]
-    { imm:4 = 0xffffffff^res; export imm;}
+    [ res = (((0x80 | imm1622) << 16 ) >> imm2325) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
 
 notpackedimm12: res is imm1622 & imm2325 & imm2627=3
-    [ res = (((0x80 | imm1622) << 8 ) >> imm2325)^0xffffffff; ]
-    { imm:4 = 0xffffffff^res; export imm;}
+    [ res = (((0x80 | imm1622) << 8 ) >> imm2325) ^ 0xffffffff; ]
+    { imm:4 = res; export imm;}
 
 #
 # 9-bit jump immediate (pc-relative)

@@ -87,29 +87,12 @@
 #################################################################
 
 #
-# rA = mask (32 bits)
+# rA = packed immediate (see packedimm12): e060 0001 = r0 = 0x1, e060 0101 = 0x10001,
+# e060 0201 = 0x1000100, e060 0301 = 0x1010101, e060 0c01 = 0x8100.
 #
-:mov eregA, #packedimm12 is group=7 & ins0011=0x60 ; eregA & imm2627>0 & packedimm12
+:mov eregA, #packedimm12 is group=7 & ins0011=0x60 ; eregA & packedimm12
 {
     eregA = packedimm12;
-}
-
-#
-# rA = mask (8-bit repeated)
-#
-:mov eregA, #bitmask is group=7 & ins0011=0x60 ; eregA & imm1623 & imm2425=3 & imm2627=0
-[ bitmask = (imm1623 << 24) | (imm1623 << 16) | (imm1623 << 8) | imm1623; ]
-{
-    eregA = bitmask;
-}
-
-#
-# rA = mask (16-bit repeated)
-#
-:mov eregA, #bitmask is group=7 & ins0011=0x60 ; eregA & imm1623 & imm2425=1 & imm2627=0
-[ bitmask = (imm1623 << 24) | (imm1623 << 8); ]
-{
-    eregA = bitmask;
 }
 
 ###########################################################################################

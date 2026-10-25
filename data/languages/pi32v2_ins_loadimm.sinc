@@ -34,12 +34,13 @@
 }
 
 #
-# rA = imm16
-# => movz rA, #imm16
+# rA = simm16 (sign-extended). The vendor shows e041 f000 = r1 = -4096 and e040 8000 = -32768;
+# a zero-extended 0xffff is loaded with the 48-bit form instead (ffc0 ffff 0000).
+# => mov rA, #simm16
 #
-:movz regA, #imm1631 is group=7 & ins0411=0x004 & regA ; imm1631
+:mov regA, #imm1631s is group=7 & ins0411=0x004 & regA ; imm1631s
 {
-	regA = imm1631;
+	regA = imm1631s;
 }
 
 # ... more to follow ... #

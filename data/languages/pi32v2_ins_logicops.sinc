@@ -36,15 +36,6 @@
     *:4 addr = *:4 addr | eregC;
 }
 
-#
-# [rA+imm6] |= packedimm12
-#
-:or [eregA+#offset], #packedimm12 is group=7 & ins0611=0x3C  & imm0005; eregA & packedimm12
-[ offset = imm0005*4; ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *:4 addr | packedimm12;
-}
 
 ###########################################################################################
 # XOR
@@ -110,86 +101,18 @@
 }
 
 #
-# rA = rB & mask (10 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #imm1625 is group=7 & ins0411=0x16 & regA ; imm1625 & imm2627=0 & eregA
+# rA = rB & packed (ins0411=0x16) / rA = rB & ~packed (ins0411=0x17), see packedimm12 in the
+# slaspec. The old 0x16 form took a raw 10-bit mask when imm2627=0, which is wrong for imm2427=1-3
+# (e160 0101 = r0 & 0x10001, not & 0x101); the 0x17 forms exported the uncomplemented value.
+#
+:and regA, eregA, #packedimm12 is group=7 & ins0411=0x16 & regA ; eregA & packedimm12
 {
-    regA = eregA & imm1625;
+    regA = eregA & packedimm12;
 }
 
-#
-# rA = rB & mask (32 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x16 & regA ; imm1622 & imm2325 & imm2627=1 & eregA
-[
-    mask = ( (0x80 | imm1622) << 24 ) >> imm2325;
-]
-{
-    regA = eregA & mask;
-}
-
-#
-# rA = rB & mask (24 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x16 & regA ; imm1622 & imm2325 & imm2627=2 & eregA
-[
-    mask = ( (0x80 | imm1622) << 16 ) >> imm2325;
-]
-{
-    regA = eregA & mask;
-}
-
-#
-# rA = rB & mask (16 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x16 & regA ; imm1622 & imm2325 & imm2627=3 & eregA
-[
-    mask = ( (0x80 | imm1622) << 8 ) >> imm2325;
-]
-{
-    regA = eregA & mask;
-}
-
-
-#
-# rA = rB & mask (10 bits inverted)
-# => and rA, rB, #mask
 :and regA, eregA, #notpackedimm12 is group=7 & ins0411=0x17 & regA ; eregA & notpackedimm12
 {
     regA = eregA & notpackedimm12;
-}
-
-#
-# rA = rB & mask (32 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x17 & regA ; imm1622 & imm2325 & imm2627=1 & eregA
-[
-    mask = (( (0x80 | imm1622) << 24 ) >> imm2325) ^ 0xffffffff;
-]
-{
-    regA = eregA & mask;
-}
-
-#
-# rA = rB & mask (24 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x17 & regA ; imm1622 & imm2325 & imm2627=2 & eregA
-[
-    mask = (( (0x80 | imm1622) << 16 ) >> imm2325) ^ 0xffffffff;
-]
-{
-    regA = eregA & mask;
-}
-
-#
-# rA = rB & mask (16 bits)
-# => and rA, rB, #mask
-:and regA, eregA, #mask is group=7 & ins0411=0x17 & regA ; imm1622 & imm2325 & imm2627=3 & eregA
-[
-    mask = (( (0x80 | imm1622) << 8 ) >> imm2325) ^ 0xffffffff;
-]
-{
-    regA = eregA & mask;
 }
 
 #
@@ -328,22 +251,63 @@
     eregA = eregB | (1 << eregC);
 }
 
-# And [reg+imm5] with bitmask
-# [rA+imm5] &= bitmask
-# and [rA + offset], bitmask
-:and [eregA+offset], #notpackedimm12 is group=7 & ins0511=0x7e & imm0004 ; eregA & notpackedimm12
-[ offset = imm0004*4;]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *:4 addr & notpackedimm12;
-} 
+###########################################################################################
+# Memory-immediate ops, [rA + simm6*4] op= imm. Verified against Jieli's llvm-objdump -mcpu=r3:
+#   hw1 = 1110 1 OOOOOO ffffff (ins0611 = op, imm0005 = signed word offset), bit 12 = 0
+#   hw2 = rA(12-15) : packedimm12 (or imm12 signed for 0x2f)
+#   0x29 [rA+off] = packed      0x2e += packed      0x2f += simm12
+#   0x3c |= packed   0x3d ^= packed   0x3e &= packed   0x3f &= ~packed
+# e.g. ea7f 4000 = [r4+-4] = 0x0, ea41 13ff = [r1+4] = 0xFFFFFFFF, ef21 1001 = [r1+-124] |= 0x1,
+#      effd 6500 = [r6+-12] &= 0xDFFFFFFF, ebff 1001 = [r1+-4] += 1, ef41 1201 = [r1+4] ^= 0x1000100.
+# The old forms took the offset unsigned (5 bits) and the stored value as a raw 10-bit field.
+# With bit 12 set (0xff..) these words are the 48-bit compare-and-branch family instead.
+###########################################################################################
 
-# Or [reg+imm8] |= bitmask
-# [rA+imm8] |= bitmask
-# or [rA+offset], bitmask
-:or [eregA+offset], #packedimm12 is group=7 & ins0411=0xf0 & imm0003 ; eregA & packedimm12
-[ offset = imm0003*4; ]
+:sw #packedimm12, [eregA + offset] is group=7 & ins0611=0x29 & ins1112=1 & imm0005s ; eregA & packedimm12
+[ offset = imm0005s * 4; ]
 {
-    addr:4 = eregA + offset;
+    local addr:4 = eregA + offset;
+    *:4 addr = packedimm12;
+}
+
+:add [eregA + offset], #packedimm12 is group=7 & ins0611=0x2e & ins1112=1 & imm0005s ; eregA & packedimm12
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr + packedimm12;
+}
+
+:add [eregA + offset], #imm1627s is group=7 & ins0611=0x2f & ins1112=1 & imm0005s ; eregA & imm1627s
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr + imm1627s;
+}
+
+:or [eregA + offset], #packedimm12 is group=7 & ins0611=0x3c & ins1112=1 & imm0005s ; eregA & packedimm12
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
     *:4 addr = *:4 addr | packedimm12;
+}
+
+:xor [eregA + offset], #packedimm12 is group=7 & ins0611=0x3d & ins1112=1 & imm0005s ; eregA & packedimm12
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr ^ packedimm12;
+}
+
+:and [eregA + offset], #packedimm12 is group=7 & ins0611=0x3e & ins1112=1 & imm0005s ; eregA & packedimm12
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & packedimm12;
+}
+
+:and [eregA + offset], #notpackedimm12 is group=7 & ins0611=0x3f & ins1112=1 & imm0005s ; eregA & notpackedimm12
+[ offset = imm0005s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & notpackedimm12;
 }

@@ -121,16 +121,6 @@
     regA = eregA + packedimm12;
 }
 
-#
-# [rA+#imm5] += #imm16s
-# add [rA + #imm5], #imm16s
-#
-:add [eregA + offset], #imm1627s is group=7 & ins0511=0x5E & imm0004 ; eregA & imm1627s
-[ offset = imm0004*4; ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *addr + imm1627s;
-}
 
 #
 # [rA+#imm5] += rB
