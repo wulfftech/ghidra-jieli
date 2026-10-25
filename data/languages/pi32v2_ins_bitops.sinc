@@ -17,17 +17,6 @@
 	regAl = regAl | (1 << imm0812);
 }
 
-#
-# [rA + imm8] |= (1 << rB)
-# => bitset [rA + imm8], rB
-#
-:bitset "["eregA + imm8"]", eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1617=0 & imm1623
-[imm8 = (imm1623 & 0xFC);]
-{
-    local addr:4 = eregA + imm8;
-    *:4 addr = addr | (1 << eregC);
-}
-
 
 ###########################################################################################
 # Toggle bit
@@ -53,17 +42,6 @@
 :bitclr regAl, imm0812 is group=1 & ins0307=0x17 & regAl & imm0812
 {
 	regAl = regAl & ~(1 << imm0812);
-}
-
-#
-# [rA + imm8] |= (1 << rB)
-# => bitclr [rA + imm8], rB
-#
-:bitclr "["eregA + imm8"]", eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1617=3 & imm1623
-[imm8 = (imm1623 & 0xFC);]
-{
-    local addr:4 = eregA + imm8;
-    *:4 addr = addr & ~(1 << eregC);
 }
 
 

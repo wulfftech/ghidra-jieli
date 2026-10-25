@@ -26,16 +26,6 @@
     eregA = eregB | eregC;
 }
 
-#
-# [rA+imm8] |= rB
-#
-:or [eregA+offset], eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823 & imm1617=0
-[ offset = imm1823<<2; ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *:4 addr | eregC;
-}
-
 
 ###########################################################################################
 # XOR
@@ -132,25 +122,6 @@
     eregA = eregB & ~(eregC);
 }
 
-#
-# [rA+imm8] &= rB
-#
-:and [eregA+offset], eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823 & imm1617=2
-[ offset = imm1823<<2; ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *:4 addr & eregC;
-}
-
-#
-# [rA+imm8] &= not(rB)
-#
-:and [eregA+offset], ~eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823 & imm1617=3
-[ offset = imm1823<<2; ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *:4 addr & (~eregC);
-}
 
 ###################################################
 # Register bits manipulation
@@ -310,4 +281,141 @@
 {
     local addr:4 = eregA + offset;
     *:4 addr = *:4 addr & notpackedimm12;
+}
+
+###########################################################################################
+# Memory-register ops, [rA + simm6*4] op= rC / op= shamt. Verified against Jieli's llvm-objdump
+# -mcpu=r3: hw1 = 0xe86X, hw2 = rA(12-15) : rC(8-11) : simm6 word offset (2-7) : op(0-1)
+#   e864 |= ^= &= &=~ rC     e866 |= ^= &= &=~ (1 << rC)     e868 += -= rC (op 1, 3 invalid)
+#   e86c / e86d <<= <<<= >>= >>>= shamt, shamt = (hw1 bit 0 : rC field), 0 means 32
+#   e86e same with a register amount
+# e.g. e868 409c = [r4+-100] += r0, e866 1094 = [r1+-108] |= 1 << r0, e86d 1000 = [r1+0] <<= 16.
+# The old forms took the offset unsigned, and bitset/bitclr OR-ed into the address instead of the
+# loaded word. `<<<` is the vendor's name (qasl, as in group 0); modelled as a plain left shift.
+###########################################################################################
+
+:or [eregA + offset], eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823s & imm1617=0
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr | eregC;
+}
+
+:xor [eregA + offset], eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823s & imm1617=1
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr ^ eregC;
+}
+
+:and [eregA + offset], eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823s & imm1617=2
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & eregC;
+}
+
+:and [eregA + offset], ~eregC is group=7 & ins0011=0x864 ; eregA & eregC & imm1823s & imm1617=3
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & ~eregC;
+}
+
+:bitset [eregA + offset], eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1823s & imm1617=0
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr | (1 << eregC);
+}
+
+:bittgl [eregA + offset], eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1823s & imm1617=1
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr ^ (1 << eregC);
+}
+
+:bit.and [eregA + offset], eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1823s & imm1617=2
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & (1 << eregC);
+}
+
+:bitclr [eregA + offset], eregC is group=7 & ins0011=0x866 ; eregA & eregC & imm1823s & imm1617=3
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr & ~(1 << eregC);
+}
+
+:add [eregA + offset], eregC is group=7 & ins0011=0x868 ; eregA & eregC & imm1823s & imm1617=0
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr + eregC;
+}
+
+:sub [eregA + offset], eregC is group=7 & ins0011=0x868 ; eregA & eregC & imm1823s & imm1617=2
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr - eregC;
+}
+
+:lsl [eregA + offset], #shamt is group=7 & ins0011=0x86c & imm0000 ; eregA & imm2427 & imm1823s & imm1617=0
+[ offset = imm1823s * 4; shamt = ((((imm0000 << 4) | imm2427) - 1) & 31) + 1; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr << shamt;
+}
+
+:lsl [eregA + offset], eregC is group=7 & ins0011=0x86e ; eregA & eregC & imm1823s & imm1617=0
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr << eregC;
+}
+
+:qasl [eregA + offset], #shamt is group=7 & ins0011=0x86c & imm0000 ; eregA & imm2427 & imm1823s & imm1617=1
+[ offset = imm1823s * 4; shamt = ((((imm0000 << 4) | imm2427) - 1) & 31) + 1; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr << shamt;
+}
+
+:qasl [eregA + offset], eregC is group=7 & ins0011=0x86e ; eregA & eregC & imm1823s & imm1617=1
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr << eregC;
+}
+
+:lsr [eregA + offset], #shamt is group=7 & ins0011=0x86c & imm0000 ; eregA & imm2427 & imm1823s & imm1617=2
+[ offset = imm1823s * 4; shamt = ((((imm0000 << 4) | imm2427) - 1) & 31) + 1; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr >> shamt;
+}
+
+:lsr [eregA + offset], eregC is group=7 & ins0011=0x86e ; eregA & eregC & imm1823s & imm1617=2
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr >> eregC;
+}
+
+:asr [eregA + offset], #shamt is group=7 & ins0011=0x86c & imm0000 ; eregA & imm2427 & imm1823s & imm1617=3
+[ offset = imm1823s * 4; shamt = ((((imm0000 << 4) | imm2427) - 1) & 31) + 1; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr s>> shamt;
+}
+
+:asr [eregA + offset], eregC is group=7 & ins0011=0x86e ; eregA & eregC & imm1823s & imm1617=3
+[ offset = imm1823s * 4; ]
+{
+    local addr:4 = eregA + offset;
+    *:4 addr = *:4 addr s>> eregC;
 }

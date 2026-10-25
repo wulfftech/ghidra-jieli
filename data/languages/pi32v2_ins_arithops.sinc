@@ -87,9 +87,12 @@
 # rA = rB + imm12s
 # => add rA, rb, #imm12
 #
-:add regA, eregA, #imm1627s is group=7 & ins0411=0x13 & regA ; eregA & imm1627s
+# 0x10 / 0x11 / 0x12 / 0x13 cover +0..4095 / +4096..8191 / -8192..-4097 / -4096..-1
+# (vendor: e130 1000 = r1 + -4096, e130 1fff = r1 + -1, e13a 0000 = r0 + -4096).
+:add regA, eregA, #imm13 is group=7 & ins0411=0x13 & regA ; eregA & imm1627
+[ imm13 = imm1627 - 4096; ]
 {
-    regA = eregA + imm1627s;
+    regA = eregA + imm13;
 }
 
 #
@@ -121,17 +124,6 @@
     regA = eregA + packedimm12;
 }
 
-
-#
-# [rA+#imm5] += rB
-# add [rA + #imm5], rB
-#
-:add [eregA + offset], eregC is group=7 & ins0011=0x868 ; eregA & eregC & imm1617=0 & imm1823
-[ offset = (imm1823<<2); ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *addr + eregC;
-}
 
 #
 # rA = rB + rC
@@ -194,16 +186,6 @@
 	regAl = regBl - regCxl;
 }
 
-#
-# [rA+#imm5] -= rB
-# sub [rA + #imm5], rB
-#
-:sub [eregA + offset], eregC is group=7 & ins0011=0x868 ; eregA & eregC & imm1617=2 & imm1823
-[ offset = (imm1823<<2); ]
-{
-    addr:4 = eregA + offset;
-    *:4 addr = *addr - eregC;
-}
 
 #
 # rA = packedimm12 - rB
