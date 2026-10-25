@@ -360,13 +360,26 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 }
 
 #
-# [sp+imm8] = rA
-# => sw rA, [sp+imm8]
+# 32-bit sp-relative forms, 0xe9dX. Second halfword: rA(12-15) : off(0-11), unsigned, unscaled.
+# Verified against Jieli's llvm-objdump -mcpu=r3 on every occurrence in a BR28 app.bin and on
+# hand-built words:
+#   e9d0 dword  off = bits 2-11, bit 1 must be 0, bit 0 = store   (e9d0 0ffd = d[sp+4092] = r1_r0)
+#   e9d4 word   off = bits 2-11, bit 1 must be 0, bit 0 = store   (e9d4 b03c = r11 = [sp+60])
+#   e9d8 half   off = bits 1-11, bit 0 = store                    (e9d8 600b = h[sp+10] = r6)
+#   e9d9 half, signed load only, off = bits 1-11, bit 0 must be 0 (e9d9 b00c = r11 = h[sp+12] (s))
+#   e9dc / e9dd / e9de   byte load (u) / load (s) / store, off = bits 0-11
+# Anything else (bit 1 set on e9d0/e9d4, bit 0 set on e9d9, e9d1-3/5-7/a/b/f) is <unknown> to the
+# vendor and is left unmatched here.
 #
-:sw eregA, [sp+imm8] is group=7 & ins0011=0x9d4 & sp ; eregA & imm1616=1 & imm1719 & imm2427
-[ imm8 = (imm1719 << 1) | (imm2427 << 4); ]
+
+#
+# [sp+imm12] = rA
+# => sw rA, [sp+imm12]
+#
+:sw eregA, [sp+imm12] is group=7 & ins0011=0x9d4 & sp ; eregA & imm1616=1 & imm1717=0 & imm1627
+[ imm12 = imm1627 & 0xffc; ]
 {
-    addr:4 = sp + imm8;
+    addr:4 = sp + imm12;
     *:4 addr = eregA;
 }
 
@@ -382,13 +395,13 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 }
 
 #
-# rA = [sp+imm8]
-# => lw rA, [sp+imm8]
+# rA = [sp+imm12]
+# => lw rA, [sp+imm12]
 #
-:lw eregA, [sp+imm8] is group=7 & ins0011=0x9d4 & sp ; eregA & imm1616=0 & imm1719 & imm2427
-[ imm8 = (imm1719 << 1) | (imm2427 << 4); ]
+:lw eregA, [sp+imm12] is group=7 & ins0011=0x9d4 & sp ; eregA & imm1616=0 & imm1717=0 & imm1627
+[ imm12 = imm1627 & 0xffc; ]
 {
-    addr:4 = sp + imm8;
+    addr:4 = sp + imm12;
     eregA = *:4 addr;
 }
 
@@ -396,8 +409,8 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 # d[sp+imm12] = rB_rA
 # => sdw rB_rA, [sp+imm12]
 #
-:sdw edregA, [sp+imm12] is group=7 & ins0011=0x9d0 & sp; edregA & imm1616=1 & imm1627
-[ imm12 = (imm1627 & 0xffe); ]
+:sdw edregA, [sp+imm12] is group=7 & ins0011=0x9d0 & sp; edregA & imm1616=1 & imm1717=0 & imm1627
+[ imm12 = (imm1627 & 0xffc); ]
 {
     addr:4 = sp + imm12;
     *:8 addr = edregA;
@@ -439,8 +452,8 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 # rB_rA = d[sp+imm12]
 # => ldw rB_rA, [sp+imm12]
 #
-:ldw edregA, [sp+imm12] is group=7 & ins0011=0x9d0 & sp; edregA & imm1616=0 & imm1627
-[ imm12 = (imm1627 & 0xffe); ]
+:ldw edregA, [sp+imm12] is group=7 & ins0011=0x9d0 & sp; edregA & imm1616=0 & imm1717=0 & imm1627
+[ imm12 = (imm1627 & 0xffc); ]
 {
     addr:4 = sp + imm12;
     edregA = *:8 addr;
@@ -464,7 +477,18 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 [ imm12 = (imm1627 & 0xffe); ]
 {
     addr:4 = sp + imm12;
-    eregA = *:2 addr;
+    eregA = zext(*:2 addr);
+}
+
+#
+# rA = h[sp+imm12] (s)
+# => lh.s rA, [sp+imm12]
+#
+:lh.s eregA, [sp+imm12] is group=7 & ins0011=0x9d9 & sp; eregA & imm1616=0 & imm1627
+[ imm12 = (imm1627 & 0xffe); ]
+{
+    addr:4 = sp + imm12;
+    eregA = sext(*:2 addr);
 }
 
 #
@@ -474,5 +498,5 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 :lb eregA, [sp+imm1627] is group=7 & ins0011=0x9dc & sp; eregA & imm1627
 {
     addr:4 = sp + imm1627;
-    eregA = *:1 addr;
+    eregA = zext(*:1 addr);
 }
