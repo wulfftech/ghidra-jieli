@@ -795,6 +795,54 @@ ReadRegs: ReadRegsMap is ReadRegsMap [bitset=0; counter=0; sep=0;] {}
     *:1 eregB = eregC:1;
 }
 ###########################################################################################
+# Group-0 register post-increment: rA = x[rB ++= rC] / x[rB ++= rC] = rA (16-bit)
+#
+# halfword: size(10-12) : rC-8 (7-9) : rB (4-6) : store (3) : rA (0-2)
+#   size 2 = word, 3 = halfword (zero-extending load), 4 = byte (zero-extending load)
+#   rA, rB are r0-r7; rC is r8-r15. Access [rB], then rB += rC.
+#   No parallel (prefix 6) form: the vendor rejects c806, though 0806 may sit in a pair's 2nd slot.
+# Verified against Jieli's llvm-objdump -mcpu=r3 on every occurrence in a BR28 app.bin and on
+# hand-built words: 0806 = r6 = [r0++=r8], 0bff = [r7++=r15] = r7, 0c0a = h[r0++=r8] = r2,
+# 1317 = r7 = b[r1++=r14] (u), 13ff = b[r7++=r15] = r7.
+###########################################################################################
+
+:lw regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=2 & ins0303=0 & regAl & regBl & regCh
+{
+    regAl = *:4 regBl;
+    regBl = regBl + regCh;
+}
+
+:sw regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=2 & ins0303=1 & regAl & regBl & regCh
+{
+    *:4 regBl = regAl;
+    regBl = regBl + regCh;
+}
+
+:lh.z regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=3 & ins0303=0 & regAl & regBl & regCh
+{
+    regAl = zext(*:2 regBl);
+    regBl = regBl + regCh;
+}
+
+:sh regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=3 & ins0303=1 & regAl & regBl & regCh
+{
+    *:2 regBl = regAl:2;
+    regBl = regBl + regCh;
+}
+
+:lb.z regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=4 & ins0303=0 & regAl & regBl & regCh
+{
+    regAl = zext(*:1 regBl);
+    regBl = regBl + regCh;
+}
+
+:sb regAl, [regBl ++= regCh] is group=0 & parallel=0 & ins1012=4 & ins0303=1 & regAl & regBl & regCh
+{
+    *:1 regBl = regAl:1;
+    regBl = regBl + regCh;
+}
+
+###########################################################################################
 # Byte load/store with immediate increment (verified against Jieli llvm-objdump)
 ###########################################################################################
 
