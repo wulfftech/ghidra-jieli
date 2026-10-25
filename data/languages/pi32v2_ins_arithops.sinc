@@ -379,3 +379,69 @@
 <skip>
     eregA = eregB;
 }
+
+###########################################################################################
+# Single-precision float ops, ins0011 = 0x53f (0xe53f; 0xf53f is the parallel-issue form).
+# hw2 = rA(12-15) : rC(8-11) : rB(4-7) : op(0-3). Verified against Jieli's llvm-objdump -mcpu=r3:
+#   op 0-3  rA = rB + - * / rC (f)        op 4  fcmp rB, rC        op 5/6  rA = fmin/fmax(rB, rC)
+#   op 7/8  rA += / -= rB * rC (f)        op 9-e  invalid
+#   op f    unary on rC, selected by bits 4-7: 0-3 ftoi, 4-7 ftou (rounding even/trunc/ceil/floor),
+#           8 itof, 9 utof, a rA.l = f32->f16, b f16->f32 from rC.l, c-f round to integral float
+# e.g. e53f 7210 = r7 = r1 + r2 (f), e53f 448f = r4 = itof(r4), e53f b71f = r11 = ftoi(r7) (trunc),
+#      e53f 5447 = r5 += r4 * r4 (f), e53f 5455 = r5 = fmin(r5, r4).
+# Modelling limits: "even" rounding uses p-code round() (nearest, ties away from zero); ftou uses the
+# signed trunc(); fcmp's flag effects and the f16 conversions are opaque pcodeops.
+###########################################################################################
+
+define pcodeop FloatCompare;
+define pcodeop FloatToHalf;
+define pcodeop HalfToFloat;
+
+:fadd eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=0 { eregA = eregB f+ eregC; }
+:fsub eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=1 { eregA = eregB f- eregC; }
+:fmul eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=2 { eregA = eregB f* eregC; }
+:fdiv eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=3 { eregA = eregB f/ eregC; }
+:fcmp eregB, eregC is group=7 & ins0011=0x53f ; eregC & eregB & imm1619=4 { FloatCompare(eregB, eregC); }
+:fmin eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=5
+{
+    local r = eregB;
+    if (eregB f<= eregC) goto <done>;
+    r = eregC;
+<done>
+    eregA = r;
+}
+:fmax eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=6
+{
+    local r = eregB;
+    if (eregC f<= eregB) goto <done>;
+    r = eregC;
+<done>
+    eregA = r;
+}
+:fmac eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=7 { eregA = eregA f+ (eregB f* eregC); }
+:fmsc eregA, eregB, eregC is group=7 & ins0011=0x53f ; eregA & eregC & eregB & imm1619=8 { eregA = eregA f- (eregB f* eregC); }
+
+:ftoi.rn eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x0 & imm1619=0xf { eregA = trunc(round(eregC)); }
+:ftoi.rz eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x1 & imm1619=0xf { eregA = trunc(eregC); }
+:ftoi.rp eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x2 & imm1619=0xf { eregA = trunc(ceil(eregC)); }
+:ftoi.rm eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x3 & imm1619=0xf { eregA = trunc(floor(eregC)); }
+:ftou.rn eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x4 & imm1619=0xf { eregA = trunc(round(eregC)); }
+:ftou.rz eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x5 & imm1619=0xf { eregA = trunc(eregC); }
+:ftou.rp eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x6 & imm1619=0xf { eregA = trunc(ceil(eregC)); }
+:ftou.rm eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x7 & imm1619=0xf { eregA = trunc(floor(eregC)); }
+:itof eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x8 & imm1619=0xf { eregA = int2float(eregC); }
+:utof eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0x9 & imm1619=0xf
+{
+    local t:8 = zext(eregC);
+    eregA = int2float(t);
+}
+:ftoh eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xa & imm1619=0xf { eregA[0,16] = FloatToHalf(eregC); }
+:htof eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xb & imm1619=0xf { eregA = HalfToFloat(eregC:2); }
+:frint.rn eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xc & imm1619=0xf { eregA = round(eregC); }
+:frint.rz eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xd & imm1619=0xf
+{
+    local t:8 = trunc(eregC);
+    eregA = int2float(t);
+}
+:frint.rp eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xe & imm1619=0xf { eregA = ceil(eregC); }
+:frint.rm eregA, eregC is group=7 & ins0011=0x53f ; eregA & eregC & imm2023=0xf & imm1619=0xf { eregA = floor(eregC); }
