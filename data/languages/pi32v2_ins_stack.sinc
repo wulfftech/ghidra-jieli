@@ -395,6 +395,26 @@ poppcregs: {pc,popreglist4} is popreglist4 & pc & ins0003
 }
 
 #
+# rA = [sp+128+imm5*4] / [sp+128+imm5*4] = rA  (group 1, ins0407 = 0x2 / 0xa)
+# Bit 5 of the halfword is offset bit 7: these are the [sp+128..252] halves of the ins0407=0/8
+# forms above. Verified against Jieli's llvm-objdump -mcpu=r3 on every occurrence in a BR28
+# app.bin and on 2020 = r0 = [sp+128], 3f2f = r15 = [sp+252], 20a0 = [sp+128] = r0, 3faf.
+#
+:lw regA, [sp+imm7] is group=1 & ins0407=0x2 & regA & imm0812 & sp
+[ imm7 = 128 + imm0812 * 4; ]
+{
+    addr:4 = sp + imm7;
+    regA = *:4 addr;
+}
+
+:sw regA, [sp+imm7] is group=1 & ins0407=0xa & regA & imm0812 & sp
+[ imm7 = 128 + imm0812 * 4; ]
+{
+    addr:4 = sp + imm7;
+    *:4 addr = regA;
+}
+
+#
 # rA = [sp+imm12]
 # => lw rA, [sp+imm12]
 #
